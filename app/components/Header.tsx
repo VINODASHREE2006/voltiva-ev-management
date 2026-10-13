@@ -57,7 +57,7 @@ export default function Header() {
           <div className="hidden md:block">
 
             <p className="text-sm font-semibold">
-              Vinodashree
+              Dhev Pragadesh
             </p>
 
             <p className="text-xs text-gray-400">
