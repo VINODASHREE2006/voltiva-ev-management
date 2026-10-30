@@ -1,27 +1,186 @@
+
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
-  Battery,
   BatteryCharging,
   Car,
   Gauge,
-  Navigation,
-  Thermometer,
+  Plus,
+  Trash2,
   Zap,
 } from "lucide-react";
+import { createClient } from "../../utils/supabase/client";
+
+type Vehicle = {
+  id: string;
+  user_id: string;
+  vehicle_name: string;
+  model: string | null;
+  battery_capacity_kwh: number | null;
+  battery_percentage: number;
+  driving_range_km: number | null;
+  created_at: string;
+};
 
 export default function VehiclePage() {
+  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [vehicleName, setVehicleName] = useState("");
+  const [model, setModel] = useState("");
+  const [capacity, setCapacity] = useState("");
+  const [battery, setBattery] = useState("100");
+  const [range, setRange] = useState("");
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+
+  const loadVehicles = useCallback(async () => {
+    setLoading(true);
+    setError("");
+
+    try {
+      const supabase = createClient();
+      const { data: authData, error: authError } =
+        await supabase.auth.getUser();
+
+      if (authError) throw authError;
+
+      if (!authData.user) {
+        setUserId(null);
+        setVehicles([]);
+        setError("Please log in before managing your vehicles.");
+        return;
+      }
+
+      setUserId(authData.user.id);
+
+      const { data, error: queryError } = await supabase
+        .from("vehicles")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (queryError) throw queryError;
+
+      setVehicles((data ?? []) as Vehicle[]);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Unable to load vehicles."
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadVehicles();
+  }, [loadVehicles]);
+
+  async function addVehicle(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSaving(true);
+    setError("");
+    setMessage("");
+
+    try {
+      if (!userId) {
+        throw new Error("Please log in before adding a vehicle.");
+      }
+
+      const batteryValue = Number(battery);
+      const capacityValue = capacity ? Number(capacity) : null;
+      const rangeValue = range ? Number(range) : null;
+
+      if (
+        !vehicleName.trim() ||
+        !Number.isInteger(batteryValue) ||
+        batteryValue < 0 ||
+        batteryValue > 100
+      ) {
+        throw new Error(
+          "Enter a vehicle name and a battery percentage from 0 to 100."
+        );
+      }
+
+      if (
+        (capacityValue !== null &&
+          (!Number.isFinite(capacityValue) || capacityValue <= 0)) ||
+        (rangeValue !== null &&
+          (!Number.isFinite(rangeValue) || rangeValue < 0))
+      ) {
+        throw new Error("Enter valid battery capacity and driving range.");
+      }
+
+      const supabase = createClient();
+
+      const { error: insertError } = await supabase
+        .from("vehicles")
+        .insert({
+          user_id: userId,
+          vehicle_name: vehicleName.trim(),
+          model: model.trim() || null,
+          battery_capacity_kwh: capacityValue,
+          battery_percentage: batteryValue,
+          driving_range_km: rangeValue,
+        });
+
+      if (insertError) throw insertError;
+
+      setVehicleName("");
+      setModel("");
+      setCapacity("");
+      setBattery("100");
+      setRange("");
+      setMessage("Vehicle saved successfully!");
+
+      await loadVehicles();
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Unable to save vehicle."
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function deleteVehicle(id: string) {
+    if (!window.confirm("Delete this vehicle?")) return;
+
+    setError("");
+    setMessage("");
+
+    try {
+      const supabase = createClient();
+
+      const { error: deleteError } = await supabase
+        .from("vehicles")
+        .delete()
+        .eq("id", id);
+
+      if (deleteError) throw deleteError;
+
+      setMessage("Vehicle deleted successfully.");
+      await loadVehicles();
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Unable to delete vehicle."
+      );
+    }
+  }
+
   return (
     <main className="min-h-screen bg-[#f6f7f5] text-[#17201b]">
       <div className="mx-auto max-w-7xl p-5 md:p-8">
-
-        {/* Header */}
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <Link
               href="/"
-              className="mb-4 inline-flex items-center gap-2 text-sm font-medium text-gray-500 hover:text-gray-900"
+              className="mb-4 inline-flex items-center gap-2 text-sm text-gray-500 hover:text-gray-900"
             >
               <ArrowLeft size={16} />
               Back to dashboard
@@ -30,400 +189,243 @@ export default function VehiclePage() {
             <p className="text-xs font-semibold uppercase tracking-wider text-emerald-600">
               Vehicle Management
             </p>
-
-            <h1 className="mt-2 text-3xl font-bold tracking-tight md:text-4xl">
-              My Vehicle
+            <h1 className="mt-2 text-3xl font-bold md:text-4xl">
+              My Vehicles
             </h1>
-
             <p className="mt-2 text-sm text-gray-500">
-              Monitor your vehicle performance and battery health.
+              Add vehicles and manage their saved battery information.
             </p>
           </div>
 
           <div className="flex items-center gap-2 rounded-full bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-700">
             <span className="h-2 w-2 rounded-full bg-emerald-500" />
-            Vehicle Connected
+            Supabase Database
           </div>
-
         </div>
 
-        {/* Vehicle Overview */}
-        <div className="mt-8 grid gap-6 lg:grid-cols-[1.3fr_0.7fr]">
-
-          {/* Vehicle Card */}
-          <div className="overflow-hidden rounded-3xl bg-[#17201b] p-6 text-white shadow-[0_10px_40px_rgba(20,40,25,0.12)] md:p-8">
-
-            <div className="flex items-start justify-between">
-
+        <div className="mt-8 grid gap-6 lg:grid-cols-[0.85fr_1.15fr]">
+          <section className="h-fit rounded-3xl border border-[#e2e7e2] bg-white p-6 shadow-sm">
+            <div className="flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700">
+                <Plus size={22} />
+              </div>
               <div>
-                <p className="text-xs uppercase tracking-wider text-white/40">
-                  Connected vehicle
-                </p>
-
-                <h2 className="mt-2 text-2xl font-bold">
-                  Tata Nexon EV
-                </h2>
-
-                <p className="mt-1 text-sm text-white/50">
-                  TN 38 XX 1234
+                <h2 className="text-lg font-bold">Add a vehicle</h2>
+                <p className="text-xs text-gray-500">
+                  Information will be saved to PostgreSQL.
                 </p>
               </div>
-
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10">
-                <Car size={23} />
-              </div>
-
             </div>
 
-            {/* Battery */}
-            <div className="mt-10 flex flex-col items-center justify-center">
+            <form onSubmit={addVehicle} className="mt-6 space-y-4">
+              <div>
+                <label className="mb-1.5 block text-sm font-medium">
+                  Vehicle name *
+                </label>
+                <input
+                  required
+                  value={vehicleName}
+                  onChange={(e) => setVehicleName(e.target.value)}
+                  placeholder="e.g. Tata Nexon EV"
+                  className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm outline-none focus:border-emerald-600"
+                />
+              </div>
 
-              <div className="relative flex h-48 w-48 items-center justify-center rounded-full border-[12px] border-white/10">
+              <div>
+                <label className="mb-1.5 block text-sm font-medium">
+                  Model / variant
+                </label>
+                <input
+                  value={model}
+                  onChange={(e) => setModel(e.target.value)}
+                  placeholder="e.g. Long Range"
+                  className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm outline-none focus:border-emerald-600"
+                />
+              </div>
 
-                <div className="absolute inset-[-12px] rounded-full border-[12px] border-transparent border-l-emerald-400 border-t-emerald-400 border-r-emerald-400 rotate-[35deg]" />
+              <div>
+                <label className="mb-1.5 block text-sm font-medium">
+                  Battery capacity (kWh)
+                </label>
+                <input
+                  type="number"
+                  min="0.1"
+                  step="0.1"
+                  value={capacity}
+                  onChange={(e) => setCapacity(e.target.value)}
+                  placeholder="e.g. 40.5"
+                  className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm outline-none focus:border-emerald-600"
+                />
+              </div>
 
-                <div className="text-center">
-
-                  <p className="text-5xl font-bold">
-                    78%
-                  </p>
-
-                  <p className="mt-2 text-xs uppercase tracking-wider text-white/40">
-                    Battery level
-                  </p>
-
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium">
+                    Battery (%)
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    min="0"
+                    max="100"
+                    step="1"
+                    value={battery}
+                    onChange={(e) => setBattery(e.target.value)}
+                    className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm outline-none focus:border-emerald-600"
+                  />
                 </div>
 
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium">
+                    Range (km)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.1"
+                    value={range}
+                    onChange={(e) => setRange(e.target.value)}
+                    placeholder="e.g. 250"
+                    className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm outline-none focus:border-emerald-600"
+                  />
+                </div>
               </div>
 
-              <p className="mt-5 text-sm text-white/50">
-                Estimated range
-              </p>
-
-              <p className="mt-1 text-2xl font-bold">
-                245 km
-              </p>
-
-            </div>
-
-            {/* Vehicle Info */}
-            <div className="mt-10 grid grid-cols-2 gap-3 md:grid-cols-4">
-
-              <InfoBox
-                label="Drive Mode"
-                value="Eco"
-              />
-
-              <InfoBox
-                label="Battery Health"
-                value="94%"
-              />
-
-              <InfoBox
-                label="Battery Temp"
-                value="31°C"
-              />
-
-              <InfoBox
-                label="Status"
-                value="Ready"
-              />
-
-            </div>
-
-          </div>
-
-          {/* Battery Summary */}
-          <div className="rounded-3xl border border-[#e2e7e2] bg-white p-6 shadow-[0_4px_20px_rgba(20,40,25,0.04)]">
-
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#eef7f0] text-emerald-600">
-              <BatteryCharging size={21} />
-            </div>
-
-            <h3 className="mt-5 text-lg font-bold">
-              Battery health
-            </h3>
-
-            <p className="mt-2 text-sm leading-6 text-gray-500">
-              Your battery is performing within the expected range.
-            </p>
-
-            <div className="mt-7">
-
-              <div className="flex items-end justify-between">
-
-                <p className="text-4xl font-bold">
-                  94%
+              {message && (
+                <p role="status" className="rounded-xl bg-emerald-50 p-3 text-sm text-emerald-800">
+                  {message}
                 </p>
+              )}
 
-                <p className="text-xs font-semibold text-emerald-600">
-                  Excellent
+              {error && (
+                <p role="alert" className="break-words rounded-xl bg-red-50 p-3 text-sm text-red-700">
+                  {error}
                 </p>
+              )}
 
-              </div>
+              <button
+                type="submit"
+                disabled={saving || !userId}
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-700 px-4 py-3 text-sm font-semibold text-white transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Plus size={17} />
+                {saving ? "Saving..." : "Save Vehicle"}
+              </button>
 
-              <div className="mt-3 h-3 overflow-hidden rounded-full bg-gray-100">
-                <div
-                  className="h-full rounded-full bg-emerald-500"
-                  style={{ width: "94%" }}
-                />
-              </div>
+              {!userId && !loading && (
+                <p className="text-xs text-gray-500">
+                  Log in with your Supabase account to save vehicles.
+                </p>
+              )}
+            </form>
+          </section>
 
-            </div>
-
-            <div className="mt-8 border-t border-gray-100 pt-6">
-
-              <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">
-                Battery condition
-              </p>
-
-              <div className="mt-4 space-y-4">
-
-                <ConditionRow
-                  label="Capacity"
-                  value="94%"
-                />
-
-                <ConditionRow
-                  label="Temperature"
-                  value="31°C"
-                />
-
-                <ConditionRow
-                  label="Voltage"
-                  value="396 V"
-                />
-
-              </div>
-
-            </div>
-
-          </div>
-
-        </div>
-
-        {/* Live Metrics */}
-        <div className="mt-6 rounded-3xl border border-[#e2e7e2] bg-white p-6 shadow-[0_4px_20px_rgba(20,40,25,0.04)]">
-
-          <div>
-            <h2 className="text-lg font-bold">
-              Live vehicle metrics
-            </h2>
-
-            <p className="mt-1 text-sm text-gray-400">
-              Current readings from your connected vehicle.
-            </p>
-          </div>
-
-          <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-
-            <MetricCard
-              icon={<Zap size={20} />}
-              label="Voltage"
-              value="396 V"
-              status="Stable"
-            />
-
-            <MetricCard
-              icon={<Gauge size={20} />}
-              label="Current"
-              value="28 A"
-              status="Normal"
-            />
-
-            <MetricCard
-              icon={<Battery size={20} />}
-              label="Power"
-              value="11.1 kW"
-              status="Optimal"
-            />
-
-            <MetricCard
-              icon={<Thermometer size={20} />}
-              label="Temperature"
-              value="31°C"
-              status="Normal"
-            />
-
-          </div>
-
-        </div>
-
-        {/* Range & Charging */}
-        <div className="mt-6 grid gap-6 md:grid-cols-2">
-
-          {/* Range */}
-          <div className="rounded-3xl border border-[#e2e7e2] bg-white p-6">
-
-            <div className="flex items-center gap-3">
-
-              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#eef7f0] text-emerald-600">
-                <Navigation size={20} />
-              </div>
-
+          <section>
+            <div className="mb-4 flex items-center justify-between">
               <div>
-                <h3 className="font-bold">
-                  Estimated range
-                </h3>
-
-                <p className="text-xs text-gray-400">
-                  Based on current battery level
+                <h2 className="text-xl font-bold">Saved vehicles</h2>
+                <p className="mt-1 text-sm text-gray-500">
+                  {vehicles.length} vehicle{vehicles.length === 1 ? "" : "s"} in your account
                 </p>
               </div>
-
+              <button
+                onClick={() => void loadVehicles()}
+                type="button"
+                className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-medium hover:bg-gray-50"
+              >
+                Refresh
+              </button>
             </div>
 
-            <div className="mt-7 flex items-end gap-2">
-
-              <span className="text-4xl font-bold">
-                245
-              </span>
-
-              <span className="mb-1 text-sm text-gray-400">
-                km
-              </span>
-
-            </div>
-
-            <p className="mt-2 text-xs font-medium text-emerald-600">
-              +12 km compared with yesterday
-            </p>
-
-          </div>
-
-          {/* Charging */}
-          <div className="rounded-3xl border border-[#e2e7e2] bg-white p-6">
-
-            <div className="flex items-center gap-3">
-
-              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#eef7f0] text-emerald-600">
-                <BatteryCharging size={20} />
+            {loading ? (
+              <div className="rounded-3xl border border-gray-200 bg-white p-8 text-center text-sm text-gray-500">
+                Loading your vehicles...
               </div>
-
-              <div>
-                <h3 className="font-bold">
-                  Charging status
-                </h3>
-
-                <p className="text-xs text-gray-400">
-                  Current charging information
+            ) : vehicles.length === 0 ? (
+              <div className="rounded-3xl border border-dashed border-gray-300 bg-white p-10 text-center">
+                <Car className="mx-auto text-gray-400" size={36} />
+                <h3 className="mt-4 font-bold">No vehicles added yet</h3>
+                <p className="mt-2 text-sm text-gray-500">
+                  Use the form to save your first vehicle.
                 </p>
               </div>
+            ) : (
+              <div className="space-y-4">
+                {vehicles.map((vehicle) => (
+                  <article
+                    key={vehicle.id}
+                    className="rounded-3xl border border-[#e2e7e2] bg-white p-6 shadow-sm"
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-700">
+                          <Car size={24} />
+                        </div>
+                        <div>
+                          <h3 className="text-lg font-bold">
+                            {vehicle.vehicle_name}
+                          </h3>
+                          <p className="text-sm text-gray-500">
+                            {vehicle.model || "Model not specified"}
+                          </p>
+                        </div>
+                      </div>
 
-            </div>
+                      <button
+                        type="button"
+                        onClick={() => void deleteVehicle(vehicle.id)}
+                        aria-label={`Delete ${vehicle.vehicle_name}`}
+                        className="rounded-xl p-2 text-gray-400 hover:bg-red-50 hover:text-red-600"
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                    </div>
 
-            <div className="mt-7">
+                    <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3">
+                      <div className="rounded-2xl bg-[#f6f8f6] p-4">
+                        <BatteryCharging size={19} className="text-emerald-700" />
+                        <p className="mt-3 text-xs text-gray-500">Battery</p>
+                        <p className="mt-1 text-xl font-bold">
+                          {vehicle.battery_percentage}%
+                        </p>
+                      </div>
 
-              <p className="text-2xl font-bold">
-                Not charging
-              </p>
+                      <div className="rounded-2xl bg-[#f6f8f6] p-4">
+                        <Zap size={19} className="text-emerald-700" />
+                        <p className="mt-3 text-xs text-gray-500">Capacity</p>
+                        <p className="mt-1 text-xl font-bold">
+                          {vehicle.battery_capacity_kwh ?? "—"}
+                          <span className="ml-1 text-xs font-medium">kWh</span>
+                        </p>
+                      </div>
 
-              <p className="mt-2 text-xs text-gray-400">
-                Vehicle is ready for your next trip.
-              </p>
+                      <div className="rounded-2xl bg-[#f6f8f6] p-4">
+                        <Gauge size={19} className="text-emerald-700" />
+                        <p className="mt-3 text-xs text-gray-500">Range</p>
+                        <p className="mt-1 text-xl font-bold">
+                          {vehicle.driving_range_km ?? "—"}
+                          <span className="ml-1 text-xs font-medium">km</span>
+                        </p>
+                      </div>
+                    </div>
 
-            </div>
-
-            <Link
-              href="/charging"
-              className="mt-5 inline-flex items-center gap-2 rounded-xl bg-[#17201b] px-4 py-2.5 text-xs font-semibold text-white hover:bg-[#26332b]"
-            >
-              Charging details
-            </Link>
-
-          </div>
-
+                    <p className="mt-4 text-xs text-gray-400">
+                      Saved on{" "}
+                      {new Date(vehicle.created_at).toLocaleDateString()}
+                    </p>
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
         </div>
 
+        <p className="mt-6 text-xs leading-5 text-gray-400">
+          Battery and range values are entered manually. Live voltage,
+          current, temperature, and charging telemetry require a vehicle
+          data source or hardware integration.
+        </p>
       </div>
     </main>
-  );
-}
-
-/* ==================== INFO BOX ==================== */
-
-function InfoBox({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}) {
-  return (
-    <div className="rounded-2xl bg-white/5 p-4">
-
-      <p className="text-[10px] uppercase tracking-wider text-white/40">
-        {label}
-      </p>
-
-      <p className="mt-2 text-sm font-semibold">
-        {value}
-      </p>
-
-    </div>
-  );
-}
-
-/* ==================== CONDITION ROW ==================== */
-
-function ConditionRow({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}) {
-  return (
-    <div className="flex items-center justify-between">
-
-      <p className="text-sm text-gray-500">
-        {label}
-      </p>
-
-      <p className="text-sm font-bold">
-        {value}
-      </p>
-
-    </div>
-  );
-}
-
-/* ==================== METRIC CARD ==================== */
-
-function MetricCard({
-  icon,
-  label,
-  value,
-  status,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-  status: string;
-}) {
-  return (
-    <div className="rounded-2xl border border-gray-100 bg-[#fafbfa] p-5">
-
-      <div className="flex items-center justify-between">
-
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#eef7f0] text-emerald-600">
-          {icon}
-        </div>
-
-        <span className="text-[10px] font-semibold text-emerald-600">
-          {status}
-        </span>
-
-      </div>
-
-      <p className="mt-5 text-xs font-medium text-gray-400">
-        {label}
-      </p>
-
-      <p className="mt-1 text-2xl font-bold">
-        {value}
-      </p>
-
-    </div>
   );
 }

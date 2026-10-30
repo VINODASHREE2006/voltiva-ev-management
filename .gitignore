@@ -39,3 +39,15 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Environment variables - keep secrets out of Git
+.env
+.env.*
+!.env.example
+
+# Dependencies and build files
+node_modules/
+.next/
+out/
+build/
+dist/

@@ -1,20 +1,81 @@
+
 "use client";
 
-import {
-  Bell,
-  Menu,
-  Search,
-} from "lucide-react";
+import { useEffect, useState } from "react";
+import { Bell, Menu, Search } from "lucide-react";
+import { createClient } from "../../utils/supabase/client";
 
 export default function Header() {
+  const [displayName, setDisplayName] = useState("User");
+
+  useEffect(() => {
+    const supabase = createClient();
+    let isMounted = true;
+
+    async function loadUser() {
+      const { data, error } = await supabase.auth.getUser();
+
+      if (!isMounted) return;
+
+      if (error || !data.user) {
+        setDisplayName("User");
+        return;
+      }
+
+      const metadata = data.user.user_metadata;
+
+      const fullName =
+        metadata?.full_name ||
+        metadata?.name ||
+        metadata?.display_name;
+
+      const emailName = data.user.email?.split("@")[0];
+
+      setDisplayName(fullName || emailName || "User");
+    }
+
+    void loadUser();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      const user = session?.user;
+
+      if (!user) {
+        setDisplayName("User");
+        return;
+      }
+
+      const metadata = user.user_metadata;
+
+      const fullName =
+        metadata?.full_name ||
+        metadata?.name ||
+        metadata?.display_name;
+
+      const emailName = user.email?.split("@")[0];
+
+      setDisplayName(fullName || emailName || "User");
+    });
+
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  const profileInitial =
+    displayName.trim().charAt(0).toUpperCase() || "U";
+
   return (
     <header className="flex h-20 items-center justify-between border-b border-[#e4e8e4] bg-white/90 px-5 backdrop-blur md:px-8">
-
       {/* Left */}
       <div className="flex items-center gap-3">
-
-        {/* Mobile menu */}
-        <button className="flex h-10 w-10 items-center justify-center rounded-xl border border-gray-200 text-gray-500 lg:hidden">
+        <button
+          type="button"
+          aria-label="Open navigation menu"
+          className="flex h-10 w-10 items-center justify-center rounded-xl border border-gray-200 text-gray-500 lg:hidden"
+        >
           <Menu size={19} />
         </button>
 
@@ -27,49 +88,42 @@ export default function Header() {
             Voltiva
           </h2>
         </div>
-
       </div>
 
       {/* Right */}
       <div className="flex items-center gap-3">
-
-        {/* Search */}
-        <button className="hidden h-10 w-10 items-center justify-center rounded-xl border border-gray-200 text-gray-500 transition hover:bg-gray-50 sm:flex">
+        <button
+          type="button"
+          aria-label="Search"
+          className="hidden h-10 w-10 items-center justify-center rounded-xl border border-gray-200 text-gray-500 transition hover:bg-gray-50 sm:flex"
+        >
           <Search size={18} />
         </button>
 
-        {/* Notification */}
-        <button className="relative flex h-10 w-10 items-center justify-center rounded-xl border border-gray-200 text-gray-500 transition hover:bg-gray-50">
-
+        <button
+          type="button"
+          aria-label="Notifications"
+          className="relative flex h-10 w-10 items-center justify-center rounded-xl border border-gray-200 text-gray-500 transition hover:bg-gray-50"
+        >
           <Bell size={18} />
-
           <span className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-emerald-500" />
-
         </button>
 
-        {/* User */}
+        {/* Dynamic user profile */}
         <div className="flex items-center gap-3 border-l border-gray-200 pl-3">
-
           <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#dcefe2] text-sm font-bold text-emerald-800">
-            V
+            {profileInitial}
           </div>
 
           <div className="hidden md:block">
-
-            <p className="text-sm font-semibold">
-              Dhev Pragadesh
+            <p className="max-w-40 truncate text-sm font-semibold">
+              {displayName}
             </p>
 
-            <p className="text-xs text-gray-400">
-              EV Owner
-            </p>
-
+            <p className="text-xs text-gray-400">EV Owner</p>
           </div>
-
         </div>
-
       </div>
-
     </header>
   );
 }
