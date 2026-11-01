@@ -2,11 +2,28 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Bell, Menu, Search } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Bell, LogOut, Menu, Search } from "lucide-react";
 import { createClient } from "../../utils/supabase/client";
 
 export default function Header() {
+  const router = useRouter();
   const [displayName, setDisplayName] = useState("User");
+  const [isSigningOut, setIsSigningOut] = useState(false);
+
+  async function handleSignOut() {
+    setIsSigningOut(true);
+    try {
+      const supabase = createClient();
+      await supabase.auth.signOut();
+      router.replace("/auth/login");
+      router.refresh();
+    } catch {
+      router.replace("/auth/login");
+    } finally {
+      setIsSigningOut(false);
+    }
+  }
 
   useEffect(() => {
     const supabase = createClient();
@@ -122,6 +139,17 @@ export default function Header() {
 
             <p className="text-xs text-gray-400">EV Owner</p>
           </div>
+
+          <button
+            type="button"
+            onClick={handleSignOut}
+            disabled={isSigningOut}
+            aria-label="Sign out"
+            title="Sign out"
+            className="flex h-10 w-10 items-center justify-center rounded-xl border border-gray-200 text-gray-500 transition hover:border-red-200 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
+          >
+            <LogOut size={16} />
+          </button>
         </div>
       </div>
     </header>

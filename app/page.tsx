@@ -1,55 +1,133 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
   Activity,
   Battery,
   BatteryCharging,
-  Bell,
   Car,
   ChevronRight,
   Gauge,
-  MapPin,
   Navigation,
-  Search,
+  Plus,
   Thermometer,
   Zap,
 } from "lucide-react";
+import { createClient } from "../utils/supabase/client";
 
-const stats = [
-  {
-    label: "Battery",
-    value: "78%",
-    detail: "Healthy",
-    icon: BatteryCharging,
-  },
-  {
-    label: "Estimated Range",
-    value: "245 km",
-    detail: "+12 km today",
-    icon: Navigation,
-  },
-  {
-    label: "Voltage",
-    value: "396 V",
-    detail: "Stable",
-    icon: Zap,
-  },
-  {
-    label: "Battery Temp",
-    value: "31°C",
-    detail: "Normal",
-    icon: Thermometer,
-  },
-];
+type Vehicle = {
+  id: string;
+  user_id: string;
+  vehicle_name: string;
+  model: string | null;
+  battery_capacity_kwh: number | null;
+  battery_percentage: number;
+  driving_range_km: number | null;
+  created_at: string;
+};
 
 export default function Home() {
+  const [vehicle, setVehicle] = useState<Vehicle | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadDashboardVehicle() {
+      try {
+        const supabase = createClient();
+        const { data: authData, error: authError } =
+          await supabase.auth.getUser();
+
+        if (!isMounted) return;
+
+        if (authError || !authData.user) {
+          setVehicle(null);
+          return;
+        }
+
+        // Fetch the user's latest saved vehicle
+        const { data, error } = await supabase
+          .from("vehicles")
+          .select("*")
+          .eq("user_id", authData.user.id)
+          .order("created_at", { ascending: false })
+          .limit(1);
+
+        if (!isMounted) return;
+
+        if (!error && data && data.length > 0) {
+          setVehicle(data[0] as Vehicle);
+        } else {
+          setVehicle(null);
+        }
+      } catch {
+        if (isMounted) {
+          setVehicle(null);
+        }
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
+    }
+
+    void loadDashboardVehicle();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const batteryPercent = vehicle ? vehicle.battery_percentage : null;
+  const estimatedRange = vehicle
+    ? vehicle.driving_range_km != null
+      ? `${vehicle.driving_range_km} km`
+      : `${Math.round(vehicle.battery_percentage * 3.2)} km`
+    : "—";
+
+  const batteryDetail =
+    batteryPercent !== null
+      ? batteryPercent >= 80
+        ? "Healthy"
+        : batteryPercent >= 40
+        ? "Normal"
+        : "Low battery"
+      : "No vehicle";
+
+  const stats = [
+    {
+      label: "Battery",
+      value: batteryPercent !== null ? `${batteryPercent}%` : "—",
+      detail: loading ? "Checking..." : batteryDetail,
+      icon: BatteryCharging,
+    },
+    {
+      label: "Estimated Range",
+      value: loading ? "..." : estimatedRange,
+      detail: vehicle ? "+12 km today" : "Add vehicle to compute",
+      icon: Navigation,
+    },
+    {
+      label: "Voltage",
+      value: vehicle ? "396 V" : "—",
+      detail: vehicle ? "Stable" : "Offline",
+      icon: Zap,
+    },
+    {
+      label: "Battery Temp",
+      value: vehicle ? "31°C" : "—",
+      detail: vehicle ? "Normal" : "Offline",
+      icon: Thermometer,
+    },
+  ];
+
   return (
     <div className="mx-auto max-w-[1500px] p-5 md:p-8">
-
       {/* Welcome */}
       <div className="mb-8 flex flex-col justify-between gap-4 md:flex-row md:items-end">
-
         <div>
-
           <p className="text-sm font-medium text-emerald-700">
             Good morning 👋
           </p>
@@ -62,7 +140,6 @@ export default function Home() {
             Monitor your EV performance, battery health and charging status
             from one place.
           </p>
-
         </div>
 
         <Link
@@ -72,14 +149,11 @@ export default function Home() {
           <Car size={17} />
           Manage vehicle
         </Link>
-
       </div>
 
       {/* Stats */}
       <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-
         {stats.map((stat) => {
-
           const Icon = stat.icon;
 
           return (
@@ -87,11 +161,8 @@ export default function Home() {
               key={stat.label}
               className="rounded-2xl border border-[#e2e7e2] bg-white p-5 shadow-[0_4px_20px_rgba(20,40,25,0.04)] transition hover:-translate-y-0.5 hover:shadow-[0_8px_28px_rgba(20,40,25,0.07)]"
             >
-
               <div className="flex items-start justify-between">
-
                 <div>
-
                   <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">
                     {stat.label}
                   </p>
@@ -103,57 +174,42 @@ export default function Home() {
                   <p className="mt-1 text-xs font-medium text-emerald-600">
                     {stat.detail}
                   </p>
-
                 </div>
 
                 <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#eef7f0] text-emerald-600">
                   <Icon size={19} />
                 </div>
-
               </div>
-
             </div>
           );
         })}
-
       </div>
 
       {/* Main Grid */}
       <div className="grid gap-6 xl:grid-cols-[1.45fr_0.8fr]">
-
         {/* Battery Chart */}
         <div className="rounded-2xl border border-[#e2e7e2] bg-white p-6 shadow-[0_4px_20px_rgba(20,40,25,0.04)]">
-
           <div className="flex items-center justify-between">
-
             <div>
-
-              <p className="text-sm font-bold">
-                Battery performance
-              </p>
+              <p className="text-sm font-bold">Battery performance</p>
 
               <p className="mt-1 text-xs text-gray-400">
                 Battery level over the last 24 hours
               </p>
-
             </div>
 
             <button className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-500">
               Last 24h
             </button>
-
           </div>
 
           <div className="mt-8 h-64">
-
             <svg
               viewBox="0 0 800 260"
               className="h-full w-full"
               preserveAspectRatio="none"
             >
-
               <defs>
-
                 <linearGradient
                   id="batteryFill"
                   x1="0"
@@ -161,21 +217,17 @@ export default function Home() {
                   y1="0"
                   y2="1"
                 >
-
                   <stop
                     offset="0%"
                     stopColor="#10b981"
                     stopOpacity="0.20"
                   />
-
                   <stop
                     offset="100%"
                     stopColor="#10b981"
                     stopOpacity="0"
                   />
-
                 </linearGradient>
-
               </defs>
 
               <line
@@ -185,7 +237,6 @@ export default function Home() {
                 y2="210"
                 stroke="#edf0ed"
               />
-
               <line
                 x1="0"
                 y1="150"
@@ -193,7 +244,6 @@ export default function Home() {
                 y2="150"
                 stroke="#edf0ed"
               />
-
               <line
                 x1="0"
                 y1="90"
@@ -201,7 +251,6 @@ export default function Home() {
                 y2="90"
                 stroke="#edf0ed"
               />
-
               <line
                 x1="0"
                 y1="30"
@@ -229,7 +278,6 @@ export default function Home() {
                 r="6"
                 fill="#10a96f"
               />
-
             </svg>
 
             <div className="mt-2 flex justify-between text-[11px] text-gray-400">
@@ -237,144 +285,166 @@ export default function Home() {
               <span>6 AM</span>
               <span>12 PM</span>
               <span>6 PM</span>
-              <span>Now</span>
+              <span>Now ({batteryPercent !== null ? `${batteryPercent}%` : "—"})</span>
             </div>
-
           </div>
-
         </div>
 
-        {/* Vehicle */}
+        {/* Vehicle Card (Dynamic Supabase Sync or Empty State) */}
         <div className="rounded-2xl bg-[#17201b] p-6 text-white shadow-[0_8px_30px_rgba(20,40,25,0.12)]">
+          {vehicle ? (
+            <>
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-xs font-medium uppercase tracking-wider text-white/50">
+                    Connected vehicle
+                  </p>
 
-          <div className="flex items-start justify-between">
+                  <h2 className="mt-2 text-xl font-bold">
+                    {vehicle.vehicle_name}
+                  </h2>
 
-            <div>
+                  <p className="mt-1 text-xs text-white/50">
+                    {vehicle.model || "Connected EV"}
+                  </p>
+                </div>
 
-              <p className="text-xs font-medium uppercase tracking-wider text-white/50">
-                Connected vehicle
-              </p>
-
-              <h2 className="mt-2 text-xl font-bold">
-                Tata Nexon EV
-              </h2>
-
-              <p className="mt-1 text-xs text-white/50">
-                TN 38 XX 1234
-              </p>
-
-            </div>
-
-            <div className="flex items-center gap-1.5 rounded-full bg-emerald-400/10 px-3 py-1.5 text-xs font-semibold text-emerald-300">
-
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-
-              Connected
-
-            </div>
-
-          </div>
-
-          <div className="mt-8 flex items-center gap-6">
-
-            <div className="relative flex h-32 w-32 items-center justify-center rounded-full border-[10px] border-white/10">
-
-              <div className="absolute inset-[-10px] rounded-full border-[10px] border-transparent border-l-emerald-400 border-t-emerald-400 border-r-emerald-400 rotate-[35deg]" />
-
-              <div className="text-center">
-
-                <p className="text-3xl font-bold">
-                  78%
-                </p>
-
-                <p className="mt-1 text-[10px] uppercase tracking-wider text-white/40">
-                  Battery
-                </p>
-
+                <div className="flex items-center gap-1.5 rounded-full bg-emerald-400/10 px-3 py-1.5 text-xs font-semibold text-emerald-300">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                  Connected
+                </div>
               </div>
 
-            </div>
+              <div className="mt-8 flex items-center gap-6">
+                <div className="relative flex h-32 w-32 items-center justify-center rounded-full border-[10px] border-white/10">
+                  <div className="absolute inset-[-10px] rounded-full border-[10px] border-transparent border-l-emerald-400 border-t-emerald-400 border-r-emerald-400 rotate-[35deg]" />
 
-            <div className="space-y-4">
+                  <div className="text-center">
+                    <p className="text-3xl font-bold">
+                      {vehicle.battery_percentage}%
+                    </p>
 
-              <div>
+                    <p className="mt-1 text-[10px] uppercase tracking-wider text-white/40">
+                      Battery
+                    </p>
+                  </div>
+                </div>
 
-                <p className="text-[10px] uppercase tracking-wider text-white/40">
-                  Battery health
-                </p>
+                <div className="space-y-4">
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wider text-white/40">
+                      Battery health
+                    </p>
 
-                <p className="mt-1 text-sm font-semibold">
-                  94% · Excellent
-                </p>
+                    <p className="mt-1 text-sm font-semibold">
+                      94% · Excellent
+                    </p>
+                  </div>
 
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wider text-white/40">
+                      Drive mode
+                    </p>
+
+                    <p className="mt-1 text-sm font-semibold">Eco</p>
+                  </div>
+                </div>
               </div>
 
-              <div>
+              <div className="mt-8 grid grid-cols-2 gap-3">
+                <div className="rounded-xl bg-white/5 p-3">
+                  <p className="text-[10px] uppercase tracking-wider text-white/40">
+                    Current
+                  </p>
 
-                <p className="text-[10px] uppercase tracking-wider text-white/40">
-                  Drive mode
-                </p>
+                  <p className="mt-1 text-sm font-semibold">28 A</p>
+                </div>
 
-                <p className="mt-1 text-sm font-semibold">
-                  Eco
-                </p>
+                <div className="rounded-xl bg-white/5 p-3">
+                  <p className="text-[10px] uppercase tracking-wider text-white/40">
+                    Power
+                  </p>
 
+                  <p className="mt-1 text-sm font-semibold">11.1 kW</p>
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="flex flex-col justify-between h-full">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-xs font-medium uppercase tracking-wider text-white/50">
+                    Connected vehicle
+                  </p>
+
+                  <h2 className="mt-2 text-xl font-bold">
+                    {loading ? "Checking vehicles..." : "No vehicle added"}
+                  </h2>
+
+                  <p className="mt-1 text-xs text-white/50">
+                    {loading
+                      ? "Loading your vehicle data..."
+                      : "Save a vehicle to monitor battery and driving telemetry"}
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-1.5 rounded-full bg-amber-400/10 px-3 py-1.5 text-xs font-semibold text-amber-300">
+                  <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+                  Not connected
+                </div>
               </div>
 
+              <div className="my-8 flex flex-col items-center justify-center rounded-2xl border border-dashed border-white/10 bg-white/5 p-6 text-center">
+                <Car className="text-white/40" size={32} />
+                <p className="mt-3 text-sm font-semibold text-white">
+                  {loading ? "Loading..." : "No vehicle in your garage"}
+                </p>
+                <p className="mt-1 text-xs text-white/50">
+                  Add your vehicle to track live telemetry and range estimates.
+                </p>
+
+                <Link
+                  href="/vehicle"
+                  className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-emerald-500 px-4 py-2.5 text-xs font-semibold text-[#17201b] transition hover:bg-emerald-400"
+                >
+                  <Plus size={15} />
+                  Add vehicle
+                </Link>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-xl bg-white/5 p-3">
+                  <p className="text-[10px] uppercase tracking-wider text-white/40">
+                    Current
+                  </p>
+
+                  <p className="mt-1 text-sm font-semibold">—</p>
+                </div>
+
+                <div className="rounded-xl bg-white/5 p-3">
+                  <p className="text-[10px] uppercase tracking-wider text-white/40">
+                    Power
+                  </p>
+
+                  <p className="mt-1 text-sm font-semibold">—</p>
+                </div>
+              </div>
             </div>
-
-          </div>
-
-          <div className="mt-8 grid grid-cols-2 gap-3">
-
-            <div className="rounded-xl bg-white/5 p-3">
-
-              <p className="text-[10px] uppercase tracking-wider text-white/40">
-                Current
-              </p>
-
-              <p className="mt-1 text-sm font-semibold">
-                28 A
-              </p>
-
-            </div>
-
-            <div className="rounded-xl bg-white/5 p-3">
-
-              <p className="text-[10px] uppercase tracking-wider text-white/40">
-                Power
-              </p>
-
-              <p className="mt-1 text-sm font-semibold">
-                11.1 kW
-              </p>
-
-            </div>
-
-          </div>
-
+          )}
         </div>
-
       </div>
 
       {/* Bottom Grid */}
       <div className="mt-6 grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
-
         {/* Station */}
         <div className="rounded-2xl border border-[#e2e7e2] bg-white p-6 shadow-[0_4px_20px_rgba(20,40,25,0.04)]">
-
           <div className="flex items-center justify-between">
-
             <div>
-
-              <p className="text-sm font-bold">
-                Nearest charging station
-              </p>
+              <p className="text-sm font-bold">Nearest charging station</p>
 
               <p className="mt-1 text-xs text-gray-400">
                 Based on your current location
               </p>
-
             </div>
 
             <Link
@@ -383,23 +453,15 @@ export default function Home() {
             >
               View all
             </Link>
-
           </div>
 
           <div className="mt-5 flex flex-col gap-5 md:flex-row">
-
             <div className="relative min-h-52 flex-1 overflow-hidden rounded-2xl bg-[#edf3ed]">
-
               <div className="absolute inset-0 opacity-40">
-
                 <div className="absolute left-0 top-16 h-px w-full rotate-6 bg-emerald-900/10" />
-
                 <div className="absolute left-10 top-32 h-px w-full -rotate-12 bg-emerald-900/10" />
-
                 <div className="absolute left-1/3 top-0 h-full w-px rotate-12 bg-emerald-900/10" />
-
                 <div className="absolute left-2/3 top-0 h-full w-px -rotate-12 bg-emerald-900/10" />
-
               </div>
 
               <div className="absolute left-[35%] top-[45%] flex h-11 w-11 items-center justify-center rounded-full bg-[#17201b] text-white shadow-lg">
@@ -417,15 +479,11 @@ export default function Home() {
               <div className="absolute bottom-3 left-3 rounded-lg bg-white/90 px-3 py-2 text-[10px] font-medium text-gray-500 backdrop-blur">
                 Live location preview
               </div>
-
             </div>
 
             <div className="w-full md:max-w-xs">
-
               <div className="rounded-2xl border border-gray-200 p-5">
-
                 <div className="flex items-start justify-between">
-
                   <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#eef7f0] text-emerald-600">
                     <Zap size={19} />
                   </div>
@@ -433,39 +491,26 @@ export default function Home() {
                   <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-bold text-emerald-700">
                     4 available
                   </span>
-
                 </div>
 
-                <h3 className="mt-4 font-bold">
-                  GreenCharge Hub
-                </h3>
+                <h3 className="mt-4 font-bold">GreenCharge Hub</h3>
 
                 <p className="mt-1 text-xs leading-5 text-gray-400">
                   Sathyamangalam Main Road
                 </p>
 
                 <div className="mt-4 grid grid-cols-2 gap-3 text-xs">
-
                   <div>
-                    <p className="text-gray-400">
-                      Distance
-                    </p>
+                    <p className="text-gray-400">Distance</p>
 
-                    <p className="mt-1 font-bold">
-                      2.4 km
-                    </p>
+                    <p className="mt-1 font-bold">2.4 km</p>
                   </div>
 
                   <div>
-                    <p className="text-gray-400">
-                      Fast charge
-                    </p>
+                    <p className="text-gray-400">Fast charge</p>
 
-                    <p className="mt-1 font-bold">
-                      60 kW
-                    </p>
+                    <p className="mt-1 font-bold">60 kW</p>
                   </div>
-
                 </div>
 
                 <Link
@@ -475,69 +520,57 @@ export default function Home() {
                   View stations
                   <ChevronRight size={15} />
                 </Link>
-
               </div>
-
             </div>
-
           </div>
-
         </div>
 
         {/* Live Metrics */}
         <div className="rounded-2xl border border-[#e2e7e2] bg-white p-6 shadow-[0_4px_20px_rgba(20,40,25,0.04)]">
-
-          <p className="text-sm font-bold">
-            Live vehicle metrics
-          </p>
+          <p className="text-sm font-bold">Live vehicle metrics</p>
 
           <p className="mt-1 text-xs text-gray-400">
             Current electrical readings
           </p>
 
           <div className="mt-6 space-y-5">
-
             <MetricRow
               icon={<Gauge size={18} />}
               label="Voltage"
-              value="396 V"
-              status="Stable"
+              value={vehicle ? "396 V" : "—"}
+              status={vehicle ? "Stable" : "Offline"}
             />
 
             <MetricRow
               icon={<Zap size={18} />}
               label="Current"
-              value="28 A"
-              status="Normal"
+              value={vehicle ? "28 A" : "—"}
+              status={vehicle ? "Normal" : "Offline"}
             />
 
             <MetricRow
               icon={<Activity size={18} />}
               label="Power output"
-              value="11.1 kW"
-              status="Optimal"
+              value={vehicle ? "11.1 kW" : "—"}
+              status={vehicle ? "Optimal" : "Offline"}
             />
 
             <MetricRow
               icon={<Thermometer size={18} />}
               label="Battery temperature"
-              value="31°C"
-              status="Normal"
+              value={vehicle ? "31°C" : "—"}
+              status={vehicle ? "Normal" : "Offline"}
             />
 
             <MetricRow
               icon={<Battery size={18} />}
               label="Battery health"
-              value="94%"
-              status="Excellent"
+              value={vehicle ? "94%" : "—"}
+              status={vehicle ? "Excellent" : "Offline"}
             />
-
           </div>
-
         </div>
-
       </div>
-
     </div>
   );
 }
@@ -555,31 +588,19 @@ function MetricRow({
 }) {
   return (
     <div className="flex items-center justify-between">
-
       <div className="flex items-center gap-3">
-
         <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#f0f6f1] text-emerald-600">
           {icon}
         </div>
 
         <div>
+          <p className="text-sm font-semibold">{label}</p>
 
-          <p className="text-sm font-semibold">
-            {label}
-          </p>
-
-          <p className="mt-0.5 text-[11px] text-emerald-600">
-            {status}
-          </p>
-
+          <p className="mt-0.5 text-[11px] text-emerald-600">{status}</p>
         </div>
-
       </div>
 
-      <p className="text-sm font-bold">
-        {value}
-      </p>
-
+      <p className="text-sm font-bold">{value}</p>
     </div>
   );
 }
